@@ -1,0 +1,489 @@
+name: Build & Release Artifacts
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build'
+        required: false
+        default: 'dev'
+
+env:
+  PROJECT_NAME: multiqc-cpp
+  BUILD_TYPE: Release
+
+jobs:
+  # ============ Windows Build (MSYS2) ============
+  build-windows:
+    name: Build Windows (MinGW)
+    runs-on: windows-2022
+    
+    strategy:
+      matrix:
+        include:
+          - { sys: mingw64, env: x86_64 }
+          - { sys: ucrt64, env: ucrt-x86_64 }
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: ${{ matrix.sys }}
+        update: true
+        install: >-
+          mingw-w64-${{ matrix.env }}-gcc
+          mingw-w64-${{ matrix.env }}-cmake
+          mingw-w64-${{ matrix.env }}-ninja
+          mingw-w64-${{ matrix.env }}-nlohmann-json
+          mingw-w64-${{ matrix.env }}-spdlog
+          mingw-w64-${{ matrix.env }}-gtest
+          mingw-w64-${{ matrix.env }}-yaml-cpp
+          mingw-w64-${{ matrix.env }}-zlib
+          make
+          git
+    
+    - name: Configure CMake
+      shell: msys2 {0}
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_INSTALL_PREFIX=install \
+          -G Ninja \
+          -DENABLE_TESTING=OFF
+    
+    - name: Build
+      shell: msys2 {0}
+      run: |
+        cmake --build build --config ${{ env.BUILD_TYPE }} --parallel $env:NUMBER_OF_PROCESSORS
+    
+    - name: Install
+      shell: msys2 {0}
+      run: |
+        cmake --install build --prefix install
+    
+    - name: Create Windows Package
+      shell: msys2 {0}
+      run: |
+        cd install
+        7z a -tzip ../${{ env.PROJECT_NAME }}-${{ github.ref_name || 'dev' }}-windows-${{ matrix.env }}.zip \
+          bin/* share/*
+        
+        # Also create a self-extracting installer
+        7z a -t7z ../${{ env.PROJECT_NAME }}-${{ github.ref_name || 'dev' }}-windows-${{ matrix.env }}.7z \
+          bin/* share/*
+    
+    - name: Upload Windows Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-${{ matrix.sys }}-binaries
+        path: |
+          *.zip
+          *.7z
+        retention-days: 30
+
+  # ============ Linux Build (AppImage, DEB, RPM) ============
+  build-linux:
+    name: Build Linux Packages
+    runs-on: ubuntu-24.04
+    
+    strategy:
+      matrix:
+        include:
+          - { format: appimage, arch: x86_64 }
+          - { format: deb, arch: x86_64 }
+          - { format: rpm, arch: x86_64 }
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          ninja-build \
+          libz-dev \
+          libnlohmann-json3-dev \
+          libspdlog-dev \
+          libgtest-dev \
+          libyaml-cpp-dev \
+          patchelf \
+          desktop-file-utils \
+          appstream \
+          fakeroot \
+          rpm \
+          rpmbuild
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -G Ninja \
+          -DENABLE_TESTING=OFF
+    
+    - name: Build
+      run: |
+        cmake --build build --config ${{ env.BUILD_TYPE }} --parallel $(nproc)
+    
+    - name: Create AppImage
+      if: matrix.format == 'appimage'
+      run: |
+        # Download AppImage tools
+        wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+        chmod +x appimagetool-x86_64.AppImage
+        
+        # Create AppDir structure
+        mkdir -p AppDir/usr/bin
+        mkdir -p AppDir/usr/share
+        mkdir -p AppDir/usr/lib
+        
+        # Copy binaries and resources
+        cp build/mqc AppDir/usr/bin/
+        cp build/mqc_fastp AppDir/usr/bin/
+        cp -r src/mqc/templates AppDir/usr/share/mqc/
+        
+        # Create desktop file
+        cat > AppDir/multiqc-cpp.desktop << 'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=MultiQC C++
+        Comment=Ultra-fast bioinformatics QC report aggregator
+        Exec=mqc %F
+        Icon=multiqc-cpp
+        Categories=Science;Bioinformatics;
+        Terminal=true
+        EOF
+        
+        # Create AppRun
+        cat > AppDir/AppRun << 'EOF'
+        #!/bin/bash
+        SELF=$(readlink -f "$0")
+        HERE=${SELF%/*}
+        export PATH="${HERE}/usr/bin:${PATH}"
+        export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+        exec "${HERE}/usr/bin/mqc" "$@"
+        EOF
+        chmod +x AppDir/AppRun
+        
+        # Copy icon (placeholder)
+        # In production, add a real icon
+        convert -size 128x128 xc:blue AppDir/multiqc-cpp.png 2>/dev/null || echo "Icon placeholder created"
+        
+        # Build AppImage
+        ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir \
+          ${{ env.PROJECT_NAME }}-${{ github.ref_name || 'dev' }}-linux-x86_64.AppImage
+        
+        # Cleanup
+        rm -rf AppDir appimagetool-x86_64.AppImage
+    
+    - name: Create DEB Package
+      if: matrix.format == 'deb'
+      run: |
+        # Create package structure
+        mkdir -p packaging/deb/DEBIAN
+        mkdir -p packaging/deb/usr/bin
+        mkdir -p packaging/deb/usr/share/mqc
+        
+        # Copy binaries
+        cp build/mqc packaging/deb/usr/bin/
+        cp build/mqc_fastp packaging/deb/usr/bin/
+        cp -r src/mqc/templates packaging/deb/usr/share/mqc/
+        
+        # Create control file
+        cat > packaging/deb/DEBIAN/control << EOF
+        Package: ${{ env.PROJECT_NAME }}
+        Version: ${VERSION:-1.0.0}
+        Section: science
+        Priority: optional
+        Architecture: amd64
+        Depends: libstdc++6, zlib1g, libnlohmann-json3-dev, libspdlog1, libyaml-cpp0.8
+        Maintainer: MultiQC C++ Team
+        Description: Ultra-fast bioinformatics QC report aggregator
+         MultiQC C++ is a high-performance rewrite of MultiQC in C++.
+         It aggregates QC results from various bioinformatics tools.
+        Homepage: https://github.com/caoronglin/multiqc-cpp
+        EOF
+        
+        # Build DEB package
+        cd packaging/deb
+        fakeroot dpkg-deb --build . \
+          ../../${{ env.PROJECT_NAME }}-${VERSION:-1.0.0}-linux-amd64.deb
+        
+        cd ../..
+    
+    - name: Create RPM Package
+      if: matrix.format == 'rpm'
+      run: |
+        # Create RPM build structure
+        mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+        
+        # Copy source
+        tar -czf ~/rpmbuild/SOURCES/${{ env.PROJECT_NAME }}-${VERSION:-1.0.0}.tar.gz \
+          --exclude='.git' \
+          --exclude='build' \
+          --exclude='install' \
+          .
+        
+        # Create spec file
+        cat > ~/rpmbuild/SPECS/${{ env.PROJECT_NAME }}.spec << EOF
+        Name:           ${{ env.PROJECT_NAME }}
+        Version:        ${VERSION:-1.0.0}
+        Release:        1%{?dist}
+        Summary:        Ultra-fast bioinformatics QC report aggregator
+        
+        License:        MIT
+        URL:            https://github.com/caoronglin/multiqc-cpp
+        Source0:        %{name}-%{version}.tar.gz
+        
+        BuildRequires:  cmake >= 3.20
+        BuildRequires:  gcc-c++
+        BuildRequires:  ninja-build
+        BuildRequires:  nlohmann-json-devel
+        BuildRequires:  spdlog-devel
+        BuildRequires:  yaml-cpp-devel
+        BuildRequires:  zlib-devel
+        
+        Requires:       nlohmann-json, spdlog, yaml-cpp, zlib
+        
+        %description
+        MultiQC C++ is a high-performance rewrite of MultiQC in C++.
+        It aggregates QC results from various bioinformatics tools
+        with 10-100x performance improvement.
+        
+        %prep
+        %setup -q
+        
+        %build
+        cmake -B build \\
+          -DCMAKE_BUILD_TYPE=Release \\
+          -DCMAKE_INSTALL_PREFIX=/usr \\
+          -G Ninja
+        cmake --build build --parallel %{_smp_build_ncpus}
+        
+        %install
+        cmake --install build --buildroot %{buildroot}
+        
+        %files
+        /usr/bin/mqc
+        /usr/bin/mqc_fastp
+        /usr/share/mqc/
+        
+        %changelog
+        * $(date +%a\ %b\ %d\ %Y) MultiQC C++ Team - ${VERSION:-1.0.0}-1
+        - Initial RPM build
+        EOF
+        
+        # Build RPM
+        rpmbuild -ba ~/rpmbuild/SPECS/${{ env.PROJECT_NAME }}.spec
+        
+        # Copy RPM to working directory
+        cp ~/rpmbuild/RPMS/x86_64/${{ env.PROJECT_NAME }}-*.rpm .
+    
+    - name: Upload Linux Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-${{ matrix.format }}-packages
+        path: |
+          *.AppImage
+          *.deb
+          *.rpm
+        retention-days: 30
+
+  # ============ macOS Build ============
+  build-macos:
+    name: Build macOS
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install Dependencies
+      run: |
+        brew install \
+          cmake \
+          ninja \
+          nlohmann-json \
+          spdlog \
+          googletest \
+          yaml-cpp
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_INSTALL_PREFIX=install \
+          -G Ninja
+    
+    - name: Build
+      run: |
+        cmake --build build --config ${{ env.BUILD_TYPE }} --parallel $(sysctl -n hw.ncpu)
+    
+    - name: Install
+      run: |
+        cmake --install build
+    
+    - name: Create macOS Bundle
+      run: |
+        # Create application bundle structure
+        mkdir -p "${{ env.PROJECT_NAME }}.app/Contents/MacOS"
+        mkdir -p "${{ env.PROJECT_NAME }}.app/Contents/Resources"
+        
+        # Copy binaries
+        cp build/mqc "${{ env.PROJECT_NAME }}.app/Contents/MacOS/"
+        cp build/mqc_fastp "${{ env.PROJECT_NAME }}.app/Contents/MacOS/"
+        
+        # Copy templates
+        cp -r src/mqc/templates "${{ env.PROJECT_NAME }}.app/Contents/Resources/"
+        
+        # Create Info.plist
+        cat > "${{ env.PROJECT_NAME }}.app/Contents/Info.plist" << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>mqc</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.multiqc.cpp</string>
+            <key>CFBundleName</key>
+            <string>MultiQC C++</string>
+            <key>CFBundleVersion</key>
+            <string>${{ github.ref_name || '1.0.0' }}</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${{ github.ref_name || '1.0.0' }}</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+            <key>LSMinimumSystemVersion</key>
+            <string>12.0</string>
+        </dict>
+        </plist>
+        EOF
+        
+        # Create tarball
+        tar -czf ${{ env.PROJECT_NAME }}-${{ github.ref_name || 'dev' }}-macos-universal.tar.gz \
+          ${{ env.PROJECT_NAME }}.app
+    
+    - name: Upload macOS Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-binaries
+        path: |
+          *.tar.gz
+        retention-days: 30
+
+  # ============ Create Release ============
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-24.04
+    needs: [build-windows, build-linux, build-macos]
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    
+    - name: List artifacts
+      run: |
+        ls -la artifacts/
+        find artifacts/ -type f
+    
+    - name: Create Release Notes
+      run: |
+        cat > release_notes.md << 'EOF'
+        # MultiQC C++ Release
+        
+        ## Installation
+        
+        ### Windows
+        - Download and extract the `.zip` file
+        - Or use the `.7z` archive for better compression
+        
+        ### Linux
+        - **AppImage**: `chmod +x *.AppImage && ./MultiQC*.AppImage`
+        - **DEB**: `sudo apt install ./multiqc-cpp*.deb`
+        - **RPM**: `sudo dnf install ./multiqc-cpp*.rpm`
+        
+        ### macOS
+        - Extract the `.tar.gz` and move `.app` to Applications
+        
+        ## Performance
+        
+        - 10-100x faster than Python MultiQC
+        - Lower memory usage
+        - Native compilation for all platforms
+        
+        ## What's New
+        
+        - Initial release with C++ rewrite
+        - Support for 10+ bioinformatics tools
+        - Integrated fastp functionality
+        - Enhanced HTML reports with Plotly.js
+        
+        ## Full Changelog
+        
+        See [CHANGELOG.md](https://github.com/caoronglin/multiqc-cpp/blob/main/CHANGELOG.md)
+        EOF
+    
+    - name: Upload Release Assets
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          artifacts/windows-*/**
+          artifacts/linux-appimage/**
+          artifacts/linux-deb/**
+          artifacts/linux-rpm/**
+          artifacts/macos-binaries/**
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+  # ============ Publish to Package Registries ============
+  publish-packages:
+    name: Publish to Package Registries
+    runs-on: ubuntu-24.04
+    needs: [build-linux]
+    if: github.event_name == 'release' && startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Download DEB artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: linux-deb-packages
+        path: packages
+    
+    - name: Setup GitHub Packages
+      run: |
+        echo "Package publishing would require additional configuration"
+        echo "See: https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-apache-maven-registry"
+    
+    - name: Upload to APT Repository
+      run: |
+        echo "APT repository integration would require:"
+        echo "1. Create a separate repository for packages"
+        echo "2. Generate Packages.gz index"
+        echo "3. Upload to GitHub Pages or S3"
+        echo "See: https://github.com/dhoeric/github-act-apt-repository"

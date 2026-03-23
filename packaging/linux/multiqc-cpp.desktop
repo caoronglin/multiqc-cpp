@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=MultiQC C++
+GenericName=Bioinformatics QC Reporter
+Comment=Ultra-fast bioinformatics QC report aggregator with 10-100x performance
+Exec=mqc %F
+Icon=multiqc-cpp
+Terminal=true
+Categories=Science;Bioinformatics;Genomics;
+Keywords=QC;FastQC;SAMtools;RNA-seq;NGS;
+MimeType=text/plain;
+StartupNotify=true
+X-Ubuntu-Touch=true

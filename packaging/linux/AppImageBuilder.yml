@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# AppImage Builder Configuration for MultiQC C++
+
+version: 1
+
+script:
+  # Clean previous builds
+  - rm -rf AppDir || true
+
+AppDir:
+  path: AppDir
+  
+  app_info:
+    id: org.multiqc.cpp
+    name: MultiQC C++
+    icon: multiqc-cpp
+    version: ${VERSION:-1.0.0}
+    exec: mqc
+    exec_args: $@
+    
+  apt:
+    arch:
+      - amd64
+    allow_unauthenticated: true
+    sources:
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ jammy main restricted
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ jammy universe
+      - sourceline: deb http://archive.ubuntu.com/ubuntu/ jammy-updates universe
+    
+    include:
+      - libstdc++6:amd64
+      - zlib1g:amd64
+      - libnlohmann-json3-dev:amd64
+      - libspdlog1:amd64
+      - libyaml-cpp0.7:amd64
+    
+  runtime:
+    env:
+      PATH: "${APPDIR}/usr/bin:${PATH}"
+      LD_LIBRARY_PATH: "${APPDIR}/usr/lib:${APPDIR}/lib:${LD_LIBRARY_PATH}"
+
+AppImage:
+  file_name: multiqc-cpp-x86_64.AppImage

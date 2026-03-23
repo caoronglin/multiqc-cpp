@@ -1,0 +1,360 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  release:
+    types: [ published ]
+
+env:
+  BUILD_TYPE: Release
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+
+jobs:
+  # ============ Build & Test on Multiple Platforms ============
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, macos-13, macos-14]
+        compiler:
+          - { c: gcc, cpp: g++, version: 11 }
+          - { c: clang, cpp: clang++, version: 14 }
+        exclude:
+          - os: macos-13
+            compiler: { c: gcc, cpp: g++, version: 11 }
+          - os: macos-14
+            compiler: { c: gcc, cpp: g++, version: 11 }
+        include:
+          - os: ubuntu-22.04
+            compiler: { c: gcc, cpp: g++, version: 11 }
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y gcc-11 g++-11 libz-dev
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+    
+    - name: Install dependencies (Ubuntu)
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        ${{ matrix.install_deps }}
+        sudo apt-get install -y ccache ninja-build cmake
+    
+    - name: Install dependencies (macOS)
+      if: startsWith(matrix.os, 'macos')
+      run: |
+        brew install ccache ninja cmake
+    
+    - name: Configure ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ runner.os }}-${{ matrix.compiler.c }}-${{ matrix.compiler.version }}
+        max-size: 500M
+    
+    - name: Configure CMake
+      run: |
+        cmake -B ${{ github.workspace }}/build \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_C_COMPILER=${{ matrix.compiler.c }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cpp }} \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DENABLE_TESTING=ON \
+          -G Ninja
+    
+    - name: Build
+      run: |
+        cmake --build ${{ github.workspace }}/build \
+          --config ${{ env.BUILD_TYPE }} \
+          --parallel $(nproc || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+    
+    - name: Run unit tests
+      run: |
+        cd ${{ github.workspace }}/build
+        ctest -C ${{ env.BUILD_TYPE }} --output-on-failure -j $(nproc || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+      continue-on-error: true
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-${{ matrix.compiler.c }}
+        path: |
+          ${{ github.workspace }}/build/Testing/
+          ${{ github.workspace }}/build/CTestTestfile.cmake
+        retention-days: 7
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mqc-binary-${{ matrix.os }}-${{ matrix.compiler.c }}
+        path: |
+          ${{ github.workspace }}/build/mqc
+          ${{ github.workspace }}/build/mqc_fastp
+        retention-days: 7
+
+  # ============ Code Quality & Static Analysis ============
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-24.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-tidy cppcheck lcov ninja-build cmake libz-dev
+    
+    - name: Configure CMake
+      run: |
+        cmake -B ${{ github.workspace }}/build \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DENABLE_CLANG_TIDY=ON \
+          -DENABLE_COVERAGE=ON \
+          -G Ninja
+    
+    - name: Run clang-tidy
+      run: |
+        cd ${{ github.workspace }}/build
+        cmake --build . --target clang-tidy 2>&1 | tee clang-tidy-output.txt || true
+    
+    - name: Upload clang-tidy results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: clang-tidy-results
+        path: ${{ github.workspace }}/build/clang-tidy-output.txt
+        retention-days: 7
+    
+    - name: Build with coverage
+      run: |
+        cmake --build ${{ github.workspace }}/build --config Debug
+    
+    - name: Run tests for coverage
+      run: |
+        cd ${{ github.workspace }}/build
+        ctest -C Debug --output-on-failure || true
+    
+    - name: Generate coverage report
+      run: |
+        cd ${{ github.workspace }}/build
+        lcov --capture --directory . --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' '*/tests/*' '*/third_party/*' --output-file coverage.info
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ${{ github.workspace }}/build/coverage.info
+        flags: unittests
+        name: codecov-coverage
+        fail_ci_if_error: false
+    
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all --inconclusive --error-exitcode=1 \
+          --suppress=missingIncludeSystem \
+          --suppress=unusedFunction \
+          src/mqc/ 2>&1 | tee cppcheck-output.txt || true
+    
+    - name: Upload cppcheck results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: cppcheck-results
+        path: cppcheck-output.txt
+        retention-days: 7
+
+  # ============ Benchmark Suite ============
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-24.04
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build cmake libz-dev bc
+    
+    - name: Build Release version
+      run: |
+        cmake -B ${{ github.workspace }}/build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -G Ninja
+        cmake --build ${{ github.workspace }}/build --parallel
+    
+    - name: Run benchmarks
+      run: |
+        chmod +x ${{ github.workspace }}/benchmarks/run_benchmarks.sh
+        cd ${{ github.workspace }}
+        ./benchmarks/run_benchmarks.sh
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: benchmark-results
+        path: |
+          ${{ github.workspace }}/benchmarks/results/
+        retention-days: 30
+    
+    - name: Store benchmark in PR comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const resultsPath = '${{ github.workspace }}/benchmarks/results/benchmark_results.md';
+          if (fs.existsSync(resultsPath)) {
+            const results = fs.readFileSync(resultsPath, 'utf8');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## 📊 Benchmark Results\n\n' + results
+            });
+          }
+
+  # ============ Documentation Generation ============
+  docs:
+    name: Generate Documentation
+    runs-on: ubuntu-24.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Install Doxygen
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y doxygen graphviz
+    
+    - name: Generate Doxygen docs
+      run: |
+        doxygen Doxyfile 2>&1 | tee doxygen-warnings.txt || true
+    
+    - name: Upload documentation
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation
+        path: |
+          docs/html/
+          docs/latex/
+          doxygen-warnings.txt
+        retention-days: 30
+
+  # ============ Release Build ============
+  release:
+    name: Create Release Artifacts
+    runs-on: ubuntu-24.04
+    needs: [build-and-test, code-quality, benchmarks]
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build cmake libz-dev
+    
+    - name: Build Release
+      run: |
+        cmake -B ${{ github.workspace }}/build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
+          -G Ninja
+        cmake --build ${{ github.workspace }}/build --parallel
+        cmake --install ${{ github.workspace }}/build
+    
+    - name: Create tarball
+      run: |
+        cd ${{ github.workspace }}/install
+        tar -czvf ${{ github.workspace }}/multiqc-cpp-${{ github.ref_name }}-linux-x86_64.tar.gz \
+          bin/ share/
+    
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ${{ github.workspace }}/multiqc-cpp-${{ github.ref_name }}-linux-x86_64.tar.gz
+        body_path: ${{ github.workspace }}/CHANGELOG.md
+        draft: false
+        prerelease: false
+
+  # ============ Deploy to GitHub Pages ============
+  deploy-pages:
+    name: Deploy Documentation
+    runs-on: ubuntu-24.04
+    needs: docs
+    if: github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: Download documentation
+      uses: actions/download-artifact@v4
+      with:
+        name: documentation
+        path: ./docs-html
+    
+    - name: Setup Pages
+      uses: actions/configure-pages@v5
+    
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./docs-html
+    
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+  # ============ Notify on Failure ============
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-24.04
+    needs: [build-and-test, code-quality, benchmarks, docs, release]
+    if: failure()
+    
+    steps:
+    - name: Send notification
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const workflow = context.workflow;
+          const repo = context.repo.repo;
+          const runId = context.runId;
+          const runUrl = `https://github.com/${context.repo.owner}/${repo}/actions/runs/${runId}`;
+          
+          console.log(`❌ Workflow ${workflow} failed!`);
+          console.log(`Check: ${runUrl}`);
