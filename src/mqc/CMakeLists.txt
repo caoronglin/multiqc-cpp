@@ -6,6 +6,7 @@ target_sources(mqc PRIVATE
     # Core
     core/module.cpp
     core/file_search.cpp
+    core/report.cpp
 )
 
 target_include_directories(mqc PUBLIC
