@@ -15,6 +15,20 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# 编译警告选项 (GCC/Clang)
+# 提供严格的代码质量检查，帮助发现潜在问题
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(
+        -Wall               # 常用警告
+        -Wextra             # 额外警告
+        -Wpedantic          # 严格标准合规
+        -Wshadow            # 变量遮蔽警告
+        -Wconversion        # 类型转换警告
+        -Wsign-conversion   # 符号转换警告
+        -Wno-unused-parameter  # 抑制未使用参数警告（常见于回调函数）
+    )
+endif()
+
 # 编译优化
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -62,6 +76,9 @@ message(STATUS "  Build type:           ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ Compiler:         ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "  C++ Standard:         ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Address Sanitizer:    ${ENABLE_ASAN}")
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    message(STATUS "  Warning Flags:        -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion")
+endif()
 message(STATUS "")
 message(STATUS "Build with: cmake --build .")
 message(STATUS "Run tests with: ctest --test-dir .")

@@ -1,0 +1,40 @@
+# EditorConfig - 统一编辑器配置
+# https://editorconfig.org
+
+root = true
+
+# 全局默认设置
+[*]
+charset = utf-8
+end_of_line = lf
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# C++ 文件 - 4 空格缩进
+[*.{cpp,hpp,h,c,cc,cxx,hxx}]
+indent_style = space
+indent_size = 4
+
+# CMake 文件 - 2 空格缩进
+[{CMakeLists.txt,*.cmake}]
+indent_style = space
+indent_size = 2
+
+# Python 文件 - 4 空格缩进
+[*.py]
+indent_style = space
+indent_size = 4
+
+# YAML 文件 - 2 空格缩进
+[*.{yaml,yml}]
+indent_style = space
+indent_size = 2
+
+# JSON 文件 - 2 空格缩进
+[*.json]
+indent_style = space
+indent_size = 2
+
+# Markdown 文件 - 保留尾部空格（用于换行）
+[*.md]
+trim_trailing_whitespace = false
