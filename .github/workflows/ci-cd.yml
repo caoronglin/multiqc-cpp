@@ -47,12 +47,18 @@ jobs:
       if: startsWith(matrix.os, 'ubuntu')
       run: |
         ${{ matrix.install_deps }}
-        sudo apt-get install -y ccache ninja-build cmake
+        sudo apt-get install -y ccache ninja-build cmake pkg-config
     
     - name: Install dependencies (macOS)
       if: startsWith(matrix.os, 'macos')
       run: |
-        brew install ccache ninja cmake
+        brew install ccache ninja cmake pkg-config
+    
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
+        vcpkgJsonGlob: '**/vcpkg.json'
     
     - name: Configure ccache
       uses: hendrikmuhs/ccache-action@v1.2
@@ -68,6 +74,7 @@ jobs:
           -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cpp }} \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
           -DENABLE_TESTING=ON \
           -G Ninja
     
@@ -117,12 +124,19 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang-tidy cppcheck lcov ninja-build cmake libz-dev
+        sudo apt-get install -y clang-tidy cppcheck lcov ninja-build cmake pkg-config libz-dev
+    
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
+        vcpkgJsonGlob: '**/vcpkg.json'
     
     - name: Configure CMake
       run: |
         cmake -B ${{ github.workspace }}/build \
           -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
           -DENABLE_CLANG_TIDY=ON \
           -DENABLE_COVERAGE=ON \
           -G Ninja
@@ -193,12 +207,19 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build cmake libz-dev bc
+        sudo apt-get install -y ninja-build cmake pkg-config libz-dev bc
+    
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
+        vcpkgJsonGlob: '**/vcpkg.json'
     
     - name: Build Release version
       run: |
         cmake -B ${{ github.workspace }}/build \
           -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
           -G Ninja
         cmake --build ${{ github.workspace }}/build --parallel
     
@@ -278,13 +299,20 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build cmake libz-dev
+        sudo apt-get install -y ninja-build cmake pkg-config libz-dev
+    
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
+        vcpkgJsonGlob: '**/vcpkg.json'
     
     - name: Build Release
       run: |
         cmake -B ${{ github.workspace }}/build \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
           -G Ninja
         cmake --build ${{ github.workspace }}/build --parallel
         cmake --install ${{ github.workspace }}/build

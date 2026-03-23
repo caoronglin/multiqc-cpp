@@ -50,6 +50,7 @@ jobs:
           mingw-w64-${{ matrix.env }}-spdlog
           mingw-w64-${{ matrix.env }}-gtest
           mingw-w64-${{ matrix.env }}-yaml-cpp
+          mingw-w64-${{ matrix.env }}-cli11
           mingw-w64-${{ matrix.env }}-zlib
           make
           git
@@ -118,23 +119,26 @@ jobs:
           build-essential \
           cmake \
           ninja-build \
+          pkg-config \
           libz-dev \
-          libnlohmann-json3-dev \
-          libspdlog-dev \
-          libgtest-dev \
-          libyaml-cpp-dev \
           patchelf \
           desktop-file-utils \
           appstream \
           fakeroot \
-          rpm \
-          rpmbuild
+          rpm
+    
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
+        vcpkgJsonGlob: '**/vcpkg.json'
     
     - name: Configure CMake
       run: |
         cmake -B build \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
           -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
           -G Ninja \
           -DENABLE_TESTING=OFF
     
@@ -156,7 +160,9 @@ jobs:
         
         # Copy binaries and resources
         cp build/mqc AppDir/usr/bin/
-        cp build/mqc_fastp AppDir/usr/bin/
+        if [ -f build/fastp ]; then
+          cp build/fastp AppDir/usr/bin/
+        fi
         cp -r src/mqc/templates AppDir/usr/share/mqc/
         
         # Create desktop file
@@ -203,7 +209,9 @@ jobs:
         
         # Copy binaries
         cp build/mqc packaging/deb/usr/bin/
-        cp build/mqc_fastp packaging/deb/usr/bin/
+        if [ -f build/fastp ]; then
+          cp build/fastp packaging/deb/usr/bin/
+        fi
         cp -r src/mqc/templates packaging/deb/usr/share/mqc/
         
         # Create control file
@@ -282,7 +290,6 @@ jobs:
         
         %files
         /usr/bin/mqc
-        /usr/bin/mqc_fastp
         /usr/share/mqc/
         
         %changelog
@@ -325,7 +332,8 @@ jobs:
           nlohmann-json \
           spdlog \
           googletest \
-          yaml-cpp
+          yaml-cpp \
+          cli11
     
     - name: Configure CMake
       run: |
@@ -350,7 +358,9 @@ jobs:
         
         # Copy binaries
         cp build/mqc "${{ env.PROJECT_NAME }}.app/Contents/MacOS/"
-        cp build/mqc_fastp "${{ env.PROJECT_NAME }}.app/Contents/MacOS/"
+        if [ -f build/fastp ]; then
+          cp build/fastp "${{ env.PROJECT_NAME }}.app/Contents/MacOS/"
+        fi
         
         # Copy templates
         cp -r src/mqc/templates "${{ env.PROJECT_NAME }}.app/Contents/Resources/"

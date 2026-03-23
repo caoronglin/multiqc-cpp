@@ -1,6 +1,6 @@
-# MultiQC C++ Core Library
+# MultiQC C++ Executable
 
-add_library(mqc STATIC)
+add_executable(mqc)
 
 target_sources(mqc PRIVATE
     # Core
@@ -35,7 +35,7 @@ target_link_libraries(mqc PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     CLI11::CLI11
-    yaml-cpp
+    yaml-cpp::yaml-cpp
 )
 
 # Inja (header-only, vendored)

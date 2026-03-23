@@ -7,35 +7,41 @@ if(NOT BUILD_FASTP)
     return()
 endif()
 
-# Copy fastp source files from original location
-# For now, create a stub that will be replaced with actual fastp integration
+# fastp submodule is at project root: ${CMAKE_SOURCE_DIR}/fastp/
+set(FASTP_SRC_DIR ${CMAKE_SOURCE_DIR}/fastp/src)
+
+# Check if fastp source files exist
+if(NOT EXISTS ${FASTP_SRC_DIR}/main.cpp)
+    message(WARNING "fastp source files not found at ${FASTP_SRC_DIR}. Skipping fastp build.")
+    return()
+endif()
 
 add_library(fastp_lib STATIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/simd.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/stats.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/filter.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/filterresult.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/sequence.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/read.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/fastqreader.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/fastareader.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/writer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/htmlreporter.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/jsonreporter.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/adaptertrimmer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/basecorrector.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/duplicate.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/evaluator.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/matcher.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/nucleotidetree.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/options.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/overlapanalysis.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/polyx.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/threadconfig.cpp
+    ${FASTP_SRC_DIR}/simd.cpp
+    ${FASTP_SRC_DIR}/stats.cpp
+    ${FASTP_SRC_DIR}/filter.cpp
+    ${FASTP_SRC_DIR}/filterresult.cpp
+    ${FASTP_SRC_DIR}/sequence.cpp
+    ${FASTP_SRC_DIR}/read.cpp
+    ${FASTP_SRC_DIR}/fastqreader.cpp
+    ${FASTP_SRC_DIR}/fastareader.cpp
+    ${FASTP_SRC_DIR}/writer.cpp
+    ${FASTP_SRC_DIR}/htmlreporter.cpp
+    ${FASTP_SRC_DIR}/jsonreporter.cpp
+    ${FASTP_SRC_DIR}/adaptertrimmer.cpp
+    ${FASTP_SRC_DIR}/basecorrector.cpp
+    ${FASTP_SRC_DIR}/duplicate.cpp
+    ${FASTP_SRC_DIR}/evaluator.cpp
+    ${FASTP_SRC_DIR}/matcher.cpp
+    ${FASTP_SRC_DIR}/nucleotidetree.cpp
+    ${FASTP_SRC_DIR}/options.cpp
+    ${FASTP_SRC_DIR}/overlapanalysis.cpp
+    ${FASTP_SRC_DIR}/polyx.cpp
+    ${FASTP_SRC_DIR}/threadconfig.cpp
 )
 
 target_include_directories(fastp_lib PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src
+    ${FASTP_SRC_DIR}
 )
 
 target_link_libraries(fastp_lib PRIVATE
@@ -52,7 +58,7 @@ endif()
 
 # fastp executable (will be integrated with mqc)
 add_executable(fastp_bin
-    ${CMAKE_CURRENT_SOURCE_DIR}/../fastp/src/main.cpp
+    ${FASTP_SRC_DIR}/main.cpp
 )
 
 target_link_libraries(fastp_bin PRIVATE

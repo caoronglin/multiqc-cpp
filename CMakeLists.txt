@@ -49,6 +49,8 @@ endif()
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(CLI11 CONFIG REQUIRED)
+find_package(yaml-cpp CONFIG REQUIRED)
 
 # 子目录
 add_subdirectory(src/mqc)
@@ -59,9 +61,16 @@ enable_testing()
 add_subdirectory(tests)
 
 # 安装规则
-install(TARGETS mqc mqc_fastp
+install(TARGETS mqc
     RUNTIME DESTINATION bin
 )
+
+# 安装 fastp 可执行文件（如果构建了的话）
+if(TARGET fastp_bin)
+    install(TARGETS fastp_bin
+        RUNTIME DESTINATION bin
+    )
+endif()
 
 install(DIRECTORY src/mqc/templates/
     DESTINATION share/mqc/templates
