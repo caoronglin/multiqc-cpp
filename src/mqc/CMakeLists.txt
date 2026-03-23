@@ -7,6 +7,14 @@ target_sources(mqc PRIVATE
     core/module.cpp
     core/file_search.cpp
     core/report.cpp
+    core/config.cpp
+    cli.cpp
+    
+    # Modules (Tier 1)
+    modules/fastqc/fastqc_module.cpp
+    
+    # Main
+    main.cpp
 )
 
 target_include_directories(mqc PUBLIC
