@@ -1,0 +1,6 @@
+[submodule "MultiQC"]
+	path = MultiQC
+	url = https://github.com/MultiQC/MultiQC.git
+[submodule "fastp"]
+	path = fastp
+	url = https://github.com/OpenGene/fastp.git
