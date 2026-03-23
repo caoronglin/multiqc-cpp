@@ -1,0 +1,105 @@
+# CMake configuration for CI/CD
+
+cmake_minimum_required(VERSION 3.20)
+project(mqc VERSION 1.0.0 LANGUAGES CXX)
+
+# C++20 标准
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# 编译选项
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# 构建类型
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# 编译优化
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_compile_options(-O3 -march=native)
+    endif()
+endif()
+
+# ============ CI/CD Options ============
+option(ENABLE_TESTING "Enable testing" ON)
+option(ENABLE_CLANG_TIDY "Enable clang-tidy analysis" OFF)
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
+option(ENABLE_ASAN "Enable Address Sanitizer" OFF)
+
+# ============ Coverage Configuration ============
+if(ENABLE_COVERAGE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "Enabling code coverage")
+        add_compile_options(--coverage -fprofile-arcs -ftest-coverage)
+        add_link_options(--coverage)
+    endif()
+endif()
+
+# ============ Clang-Tidy Configuration ============
+if(ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+    if(CLANG_TIDY_EXE)
+        message(STATUS "Enabling clang-tidy: ${CLANG_TIDY_EXE}")
+        set(CMAKE_CXX_CLANG_TIDY ${CLANG_TIDY_EXE})
+    else()
+        message(FATAL_ERROR "clang-tidy requested but not found")
+    endif()
+endif()
+
+# ============ Address Sanitizer ============
+if(ENABLE_ASAN)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(STATUS "Enabling Address Sanitizer")
+        add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address)
+    endif()
+endif()
+
+# ============ Dependencies ============
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(GTest CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+
+# ============ Subdirectories ============
+add_subdirectory(src/mqc)
+add_subdirectory(src/fastp)
+
+# ============ Testing ============
+if(ENABLE_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# ============ Installation ============
+install(TARGETS mqc mqc_fastp
+    RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY src/mqc/templates/
+    DESTINATION share/mqc/templates
+)
+
+install(FILES README.md LICENSE
+    DESTINATION share/doc/mqc
+)
+
+# ============ Print Configuration ============
+message(STATUS "")
+message(STATUS "MultiQC C++ Configuration Summary")
+message(STATUS "=================================")
+message(STATUS "  Version:              ${PROJECT_VERSION}")
+message(STATUS "  Build type:           ${CMAKE_BUILD_TYPE}")
+message(STATUS "  C++ Compiler:         ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "  C++ Standard:         ${CMAKE_CXX_STANDARD}")
+message(STATUS "  Testing:              ${ENABLE_TESTING}")
+message(STATUS "  clang-tidy:           ${ENABLE_CLANG_TIDY}")
+message(STATUS "  Coverage:             ${ENABLE_COVERAGE}")
+message(STATUS "  Address Sanitizer:    ${ENABLE_ASAN}")
+message(STATUS "")
+message(STATUS "Build with: cmake --build <build-dir>")
+message(STATUS "Test with: ctest --test-dir <build-dir>")
+message(STATUS "")
