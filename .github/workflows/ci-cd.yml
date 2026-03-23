@@ -47,18 +47,22 @@ jobs:
       if: startsWith(matrix.os, 'ubuntu')
       run: |
         ${{ matrix.install_deps }}
-        sudo apt-get install -y ccache ninja-build cmake pkg-config
+        sudo apt-get install -y ccache ninja-build cmake pkg-config autoconf libtool
     
     - name: Install dependencies (macOS)
       if: startsWith(matrix.os, 'macos')
       run: |
-        brew install ccache ninja cmake pkg-config
+        brew install ccache ninja cmake pkg-config autoconf libtool
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
       with:
         vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
         vcpkgJsonGlob: '**/vcpkg.json'
+    
+    - name: Install vcpkg dependencies
+      run: |
+        ${{ github.workspace }}/vcpkg/vcpkg install --x-manifest-root=${{ github.workspace }} --x-install-root=${{ github.workspace }}/vcpkg_installed
     
     - name: Configure ccache
       uses: hendrikmuhs/ccache-action@v1.2
@@ -75,6 +79,7 @@ jobs:
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+          -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed \
           -DENABLE_TESTING=ON \
           -G Ninja
     
@@ -124,7 +129,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang-tidy cppcheck lcov ninja-build cmake pkg-config libz-dev
+        sudo apt-get install -y clang-tidy cppcheck lcov ninja-build cmake pkg-config libz-dev autoconf libtool
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -132,11 +137,16 @@ jobs:
         vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
         vcpkgJsonGlob: '**/vcpkg.json'
     
+    - name: Install vcpkg dependencies
+      run: |
+        ${{ github.workspace }}/vcpkg/vcpkg install --x-manifest-root=${{ github.workspace }} --x-install-root=${{ github.workspace }}/vcpkg_installed
+    
     - name: Configure CMake
       run: |
         cmake -B ${{ github.workspace }}/build \
           -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+          -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed \
           -DENABLE_CLANG_TIDY=ON \
           -DENABLE_COVERAGE=ON \
           -G Ninja
@@ -207,7 +217,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build cmake pkg-config libz-dev bc
+        sudo apt-get install -y ninja-build cmake pkg-config libz-dev bc autoconf libtool
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -215,11 +225,16 @@ jobs:
         vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
         vcpkgJsonGlob: '**/vcpkg.json'
     
+    - name: Install vcpkg dependencies
+      run: |
+        ${{ github.workspace }}/vcpkg/vcpkg install --x-manifest-root=${{ github.workspace }} --x-install-root=${{ github.workspace }}/vcpkg_installed
+    
     - name: Build Release version
       run: |
         cmake -B ${{ github.workspace }}/build \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+          -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed \
           -G Ninja
         cmake --build ${{ github.workspace }}/build --parallel
     
@@ -299,7 +314,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build cmake pkg-config libz-dev
+        sudo apt-get install -y ninja-build cmake pkg-config libz-dev autoconf libtool
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -307,12 +322,17 @@ jobs:
         vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
         vcpkgJsonGlob: '**/vcpkg.json'
     
+    - name: Install vcpkg dependencies
+      run: |
+        ${{ github.workspace }}/vcpkg/vcpkg install --x-manifest-root=${{ github.workspace }} --x-install-root=${{ github.workspace }}/vcpkg_installed
+    
     - name: Build Release
       run: |
         cmake -B ${{ github.workspace }}/build \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+          -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed \
           -G Ninja
         cmake --build ${{ github.workspace }}/build --parallel
         cmake --install ${{ github.workspace }}/build

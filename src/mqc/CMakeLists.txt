@@ -1,14 +1,14 @@
-# MultiQC C++ Executable
+# MultiQC C++ Core Library and Executable
 
-add_executable(mqc)
+# Core library (static)
+add_library(mqc_core STATIC)
 
-target_sources(mqc PRIVATE
+target_sources(mqc_core PRIVATE
     # Core
     core/module.cpp
     core/file_search.cpp
     core/report.cpp
     core/config.cpp
-    cli.cpp
     
     # Modules (Tier 1)
     modules/fastqc/fastqc_module.cpp
@@ -22,16 +22,13 @@ target_sources(mqc PRIVATE
     modules/bcftools/bcftools_module.cpp
     modules/featurecounts/featurecounts_module.cpp
     modules/bclconvert/bclconvert_module.cpp
-    
-    # Main
-    main.cpp
 )
 
-target_include_directories(mqc PUBLIC
+target_include_directories(mqc_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(mqc PUBLIC
+target_link_libraries(mqc_core PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     CLI11::CLI11
@@ -39,17 +36,27 @@ target_link_libraries(mqc PUBLIC
 )
 
 # Inja (header-only, vendored)
-target_include_directories(mqc PRIVATE
+target_include_directories(mqc_core PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/inja/include
 )
 
 # C++20 features
-target_compile_features(mqc PUBLIC cxx_std_20)
+target_compile_features(mqc_core PUBLIC cxx_std_20)
 
 # Platform-specific
 if(WIN32)
-    target_compile_definitions(mqc PRIVATE
+    target_compile_definitions(mqc_core PRIVATE
         NOMINMAX
         WIN32_LEAN_AND_MEAN
     )
 endif()
+
+# Main executable
+add_executable(mqc
+    cli.cpp
+    main.cpp
+)
+
+target_link_libraries(mqc PRIVATE
+    mqc_core
+)

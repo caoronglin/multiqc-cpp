@@ -125,7 +125,9 @@ jobs:
           desktop-file-utils \
           appstream \
           fakeroot \
-          rpm
+          rpm \
+          autoconf \
+          libtool
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -133,12 +135,17 @@ jobs:
         vcpkgGitCommitId: 'a34c873a9717a888f58dc05268dea15592c2f0ff'
         vcpkgJsonGlob: '**/vcpkg.json'
     
+    - name: Install vcpkg dependencies
+      run: |
+        ${{ github.workspace }}/vcpkg/vcpkg install --x-manifest-root=${{ github.workspace }} --x-install-root=${{ github.workspace }}/vcpkg_installed
+    
     - name: Configure CMake
       run: |
         cmake -B build \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+          -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed \
           -G Ninja \
           -DENABLE_TESTING=OFF
     

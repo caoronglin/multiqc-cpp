@@ -9,7 +9,7 @@ add_executable(mqc_tests_unit
 )
 
 target_link_libraries(mqc_tests_unit PRIVATE
-    mqc
+    mqc_core
     GTest::gtest_main
     GTest::gmock
 )
@@ -23,7 +23,7 @@ add_executable(mqc_tests_integration
 )
 
 target_link_libraries(mqc_tests_integration PRIVATE
-    mqc
+    mqc_core
     GTest::gtest_main
 )
 
