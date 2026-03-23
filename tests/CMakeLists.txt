@@ -5,6 +5,7 @@ include(GoogleTest)
 # Unit tests
 add_executable(mqc_tests_unit
     unit/test_module.cpp
+    unit/test_file_search.cpp
 )
 
 target_link_libraries(mqc_tests_unit PRIVATE

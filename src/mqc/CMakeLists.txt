@@ -5,6 +5,7 @@ add_library(mqc STATIC)
 target_sources(mqc PRIVATE
     # Core
     core/module.cpp
+    core/file_search.cpp
 )
 
 target_include_directories(mqc PUBLIC
