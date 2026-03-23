@@ -12,6 +12,16 @@ target_sources(mqc PRIVATE
     
     # Modules (Tier 1)
     modules/fastqc/fastqc_module.cpp
+    modules/samtools/samtools_module.cpp
+    modules/picard/picard_module.cpp
+    modules/bowtie2/bowtie2_module.cpp
+    modules/star/star_module.cpp
+    modules/salmon/salmon_module.cpp
+    modules/cutadapt/cutadapt_module.cpp
+    modules/bismark/bismark_module.cpp
+    modules/bcftools/bcftools_module.cpp
+    modules/featurecounts/featurecounts_module.cpp
+    modules/bclconvert/bclconvert_module.cpp
     
     # Main
     main.cpp
