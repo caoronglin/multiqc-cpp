@@ -5,69 +5,73 @@
 
 namespace fs = std::filesystem;
 
-namespace mqc {
+namespace mqc
+{
 
 const std::vector<std::string>& ConfigManager::get_default_paths() {
-    static std::vector<std::string> paths = {
-        "multiqc_config.yaml",
-        "multiqc_config.yml",
-        "~/.multiqc_config.yaml",
-        "/etc/multiqc_config.yaml"
-    };
+    static std::vector<std::string> paths = {"multiqc_config.yaml", "multiqc_config.yml", "~/.multiqc_config.yaml",
+                                             "/etc/multiqc_config.yaml"};
     return paths;
 }
 
 std::optional<Config> Config::load_from_file(const std::string& path) {
     try {
         YAML::Node yaml = YAML::LoadFile(path);
-        
+
         Config config;
-        
+
         // 输出设置
-        if (yaml["output_fn_name"]) config.filename = yaml["output_fn_name"].as<std::string>();
-        if (yaml["title"]) config.title = yaml["title"].as<std::string>();
-        if (yaml["report_comment"]) config.report_comment = yaml["report_comment"].as<std::string>();
-        if (yaml["intro_text"]) config.intro_text = yaml["intro_text"].as<std::string>();
-        if (yaml["template"]) config.template_name = yaml["template"].as<std::string>();
-        
+        if (yaml["output_fn_name"])
+            config.filename = yaml["output_fn_name"].as<std::string>();
+        if (yaml["title"])
+            config.title = yaml["title"].as<std::string>();
+        if (yaml["report_comment"])
+            config.report_comment = yaml["report_comment"].as<std::string>();
+        if (yaml["intro_text"])
+            config.intro_text = yaml["intro_text"].as<std::string>();
+        if (yaml["template"])
+            config.template_name = yaml["template"].as<std::string>();
+
         // 目录
-        if (yaml["data_dir_name"]) config.data_dir = yaml["data_dir_name"].as<std::string>();
-        if (yaml["plots_dir_name"]) config.plots_dir = yaml["plots_dir_name"].as<std::string>();
-        
+        if (yaml["data_dir_name"])
+            config.data_dir = yaml["data_dir_name"].as<std::string>();
+        if (yaml["plots_dir_name"])
+            config.plots_dir = yaml["plots_dir_name"].as<std::string>();
+
         // 布尔标志
-        if (yaml["force"]) config.force = yaml["force"].as<bool>();
-        if (yaml["data_dir"]) config.data_dir = yaml["data_dir"].as<bool>();
-        if (yaml["export_plots"]) config.export_plots = yaml["export_plots"].as<bool>();
-        
+        if (yaml["force"])
+            config.force = yaml["force"].as<bool>();
+        if (yaml["data_dir"])
+            config.data_dir = yaml["data_dir"].as<bool>();
+        if (yaml["export_plots"])
+            config.export_plots = yaml["export_plots"].as<bool>();
+
         // 样本名替换
         if (yaml["sample_names_rename"]) {
             for (const auto& rule : yaml["sample_names_rename"]) {
                 if (rule.IsSequence() && rule.size() == 2) {
-                    config.sample_names_rename.emplace_back(
-                        rule[0].as<std::string>(),
-                        rule[1].as<std::string>()
-                    );
+                    config.sample_names_rename.emplace_back(rule[0].as<std::string>(), rule[1].as<std::string>());
                 }
             }
         }
-        
+
         // 模块设置
         if (yaml["module_order"]) {
             for (const auto& mod : yaml["module_order"]) {
                 config.module_order[mod.first.as<std::string>()] = true;
             }
         }
-        
+
         // 忽略的样本
         if (yaml["ignore_samples"]) {
             for (const auto& sample : yaml["ignore_samples"]) {
                 config.ignore_samples.push_back(sample.as<std::string>());
             }
         }
-        
+
         spdlog::info("Loaded config from: {}", path);
         return config;
-        
+
     } catch (const std::exception& e) {
         spdlog::error("Failed to load config from {}: {}", path, e.what());
         return std::nullopt;
@@ -77,12 +81,16 @@ std::optional<Config> Config::load_from_file(const std::string& path) {
 std::optional<Config> Config::load_from_json(const nlohmann::json& json) {
     try {
         Config config;
-        
-        if (json.contains("filename")) config.filename = json["filename"];
-        if (json.contains("title")) config.title = json["title"];
-        if (json.contains("force")) config.force = json["force"];
-        if (json.contains("export_plots")) config.export_plots = json["export_plots"];
-        
+
+        if (json.contains("filename"))
+            config.filename = json["filename"];
+        if (json.contains("title"))
+            config.title = json["title"];
+        if (json.contains("force"))
+            config.force = json["force"];
+        if (json.contains("export_plots"))
+            config.export_plots = json["export_plots"];
+
         return config;
     } catch (const std::exception& e) {
         spdlog::error("Failed to load config from JSON: {}", e.what());
@@ -93,7 +101,7 @@ std::optional<Config> Config::load_from_json(const nlohmann::json& json) {
 bool Config::save_to_file(const std::string& path) const {
     try {
         YAML::Node yaml;
-        
+
         yaml["output_fn_name"] = filename;
         yaml["title"] = title;
         yaml["template"] = template_name;
@@ -101,11 +109,11 @@ bool Config::save_to_file(const std::string& path) const {
         yaml["plots_dir_name"] = plots_dir;
         yaml["force"] = force;
         yaml["export_plots"] = export_plots;
-        
+
         if (!report_comment.empty()) {
             yaml["report_comment"] = report_comment;
         }
-        
+
         if (!sample_names_rename.empty()) {
             YAML::Node rename_list = YAML::Node(YAML::NodeType::Sequence);
             for (const auto& [from, to] : sample_names_rename) {
@@ -116,7 +124,7 @@ bool Config::save_to_file(const std::string& path) const {
             }
             yaml["sample_names_rename"] = rename_list;
         }
-        
+
         std::ofstream ofs(path);
         if (!ofs.is_open()) {
             spdlog::error("Cannot open config file for writing: {}", path);
@@ -124,10 +132,10 @@ bool Config::save_to_file(const std::string& path) const {
         }
         ofs << yaml;
         ofs.close();
-        
+
         spdlog::info("Saved config to: {}", path);
         return true;
-        
+
     } catch (const std::exception& e) {
         spdlog::error("Failed to save config to {}: {}", path, e.what());
         return false;
@@ -144,11 +152,11 @@ nlohmann::json Config::to_json() const {
     json["force"] = force;
     json["export_plots"] = export_plots;
     json["verbose"] = verbose;
-    
+
     if (!report_comment.empty()) {
         json["report_comment"] = report_comment;
     }
-    
+
     return json;
 }
 
@@ -159,7 +167,7 @@ ConfigManager& ConfigManager::instance() {
 
 bool ConfigManager::load(const std::string& path) {
     std::optional<Config> loaded;
-    
+
     if (!path.empty()) {
         // 加载指定路径
         loaded = Config::load_from_file(path);
@@ -174,13 +182,13 @@ bool ConfigManager::load(const std::string& path) {
             }
         }
     }
-    
+
     if (loaded.has_value()) {
         config_ = loaded.value();
         spdlog::debug("Configuration loaded successfully");
         return true;
     }
-    
+
     spdlog::debug("No configuration file found, using defaults");
     return false;
 }

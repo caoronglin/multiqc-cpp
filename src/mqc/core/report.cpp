@@ -5,7 +5,8 @@
 
 namespace fs = std::filesystem;
 
-namespace mqc {
+namespace mqc
+{
 
 // ============ 默认 HTML 模板 ============
 
@@ -71,9 +72,7 @@ const char* ReportGenerator::DEFAULT_TEMPLATE = R"(<!DOCTYPE html>
 
 // ============ ReportGenerator 实现 ============
 
-ReportGenerator::ReportGenerator(ReportConfig config)
-    : config_(std::move(config)) {
-    
+ReportGenerator::ReportGenerator(ReportConfig config) : config_(std::move(config)) {
     // 设置 Inja 模板路径
     if (!config_.template_dir.empty()) {
         env_.set_template_path(config_.template_dir);
@@ -97,28 +96,28 @@ void ReportGenerator::set_template(const fs::path& template_path) {
 
 std::string ReportGenerator::generate(const fs::path& output_dir) {
     spdlog::info("Generating report in: {}", output_dir.string());
-    
+
     // 创建输出目录
     if (config_.make_data_dir) {
         fs::create_directories(output_dir / config_.data_dir);
         write_data_files(output_dir / config_.data_dir);
     }
-    
+
     if (config_.export_plots) {
         fs::create_directories(output_dir / config_.plots_dir);
         write_plot_files(output_dir / config_.plots_dir);
     }
-    
+
     // 准备模板数据
     nlohmann::json data;
     data["title"] = config_.title;
     data["report_comment"] = config_.report_comment;
     data["intro_text"] = config_.intro_text;
-    
+
     // 通用统计表
     data["has_general_stats"] = false;
     data["general_stats_html"] = "";
-    
+
     // 模块数据
     std::vector<nlohmann::json> modules_json;
     for (const auto* module : modules_) {
@@ -127,7 +126,7 @@ std::string ReportGenerator::generate(const fs::path& output_dir) {
         mod_json["name"] = module->name();
         mod_json["info"] = module->info();
         mod_json["anchor"] = module->anchor_;
-        
+
         // 章节
         mod_json["sections"] = nlohmann::json::array();
         for (const auto& section : module->sections()) {
@@ -135,11 +134,11 @@ std::string ReportGenerator::generate(const fs::path& output_dir) {
             sec_json["name"] = section.name;
             sec_json["anchor"] = section.anchor;
             sec_json["description"] = section.description;
-            
+
             if (section.content.has_value()) {
                 sec_json["content"] = section.content.value();
             }
-            
+
             if (section.plot_id.has_value()) {
                 sec_json["plot_id"] = section.plot_id.value();
                 // 查找并渲染图表
@@ -150,14 +149,14 @@ std::string ReportGenerator::generate(const fs::path& output_dir) {
                     }
                 }
             }
-            
+
             mod_json["sections"].push_back(sec_json);
         }
-        
+
         modules_json.push_back(mod_json);
     }
     data["modules"] = modules_json;
-    
+
     // 渲染模板
     std::string html;
     if (fs::exists(template_path_)) {
@@ -168,7 +167,7 @@ std::string ReportGenerator::generate(const fs::path& output_dir) {
         auto tmpl = env_.parse(DEFAULT_TEMPLATE);
         html = env_.render(tmpl, data);
     }
-    
+
     // 写入文件
     auto output_path = output_dir / config_.output_fn;
     std::ofstream ofs(output_path);
@@ -178,18 +177,18 @@ std::string ReportGenerator::generate(const fs::path& output_dir) {
     }
     ofs << html;
     ofs.close();
-    
+
     spdlog::info("Report written: {} ({} bytes)", output_path.string(), html.size());
-    
+
     return output_path.string();
 }
 
 void ReportGenerator::write_data_files(const fs::path& output_dir) {
     spdlog::info("Writing data files to: {}", output_dir.string());
-    
+
     // 写入通用统计表
     nlohmann::json all_data;
-    
+
     for (const auto* module : modules_) {
         // 每个模块的数据
         const auto& data = module->data();
@@ -197,7 +196,7 @@ void ReportGenerator::write_data_files(const fs::path& output_dir) {
             all_data[module->id()] = data;
         }
     }
-    
+
     auto data_path = output_dir / "multiqc_data.json";
     std::ofstream ofs(data_path);
     if (ofs.is_open()) {
@@ -209,7 +208,7 @@ void ReportGenerator::write_data_files(const fs::path& output_dir) {
 
 void ReportGenerator::write_plot_files(const fs::path& output_dir) {
     spdlog::info("Writing plot files to: {}", output_dir.string());
-    
+
     for (const auto* module : modules_) {
         for (const auto& plot : module->plots()) {
             auto plot_path = output_dir / (plot.config.id + ".json");
@@ -225,7 +224,7 @@ void ReportGenerator::write_plot_files(const fs::path& output_dir) {
 
 std::string ReportGenerator::render_plotly_config(const PlotData& plot) {
     nlohmann::json config;
-    
+
     // 根据图表类型生成配置
     switch (plot.config.type) {
         case PlotType::Bar:
@@ -243,7 +242,7 @@ std::string ReportGenerator::render_plotly_config(const PlotData& plot) {
         default:
             config = PlotlyGenerator::bar_plot(plot);
     }
-    
+
     return config.dump();
 }
 
@@ -251,11 +250,11 @@ std::string ReportGenerator::render_plotly_config(const PlotData& plot) {
 
 nlohmann::json PlotlyGenerator::bar_plot(const PlotData& plot) {
     nlohmann::json data = nlohmann::json::array();
-    
+
     // 转换数据为 Plotly 格式
     std::vector<std::string> labels;
     std::vector<double> values;
-    
+
     if (plot.data.is_object()) {
         for (auto& [key, value] : plot.data.items()) {
             labels.push_back(key);
@@ -264,35 +263,35 @@ nlohmann::json PlotlyGenerator::bar_plot(const PlotData& plot) {
             }
         }
     }
-    
+
     nlohmann::json trace;
     trace["type"] = "bar";
     trace["x"] = labels;
     trace["y"] = values;
     trace["name"] = plot.config.title;
-    
+
     data.push_back(trace);
-    
+
     nlohmann::json layout;
     layout["title"] = plot.config.title;
     layout["xaxis"]["title"] = plot.config.xlab;
     layout["yaxis"]["title"] = plot.config.ylab;
-    
+
     return {{"data", data}, {"layout", layout}};
 }
 
 nlohmann::json PlotlyGenerator::line_plot(const PlotData& plot) {
     nlohmann::json data = nlohmann::json::array();
-    
+
     nlohmann::json trace;
     trace["type"] = "scatter";
     trace["mode"] = "lines";
     trace["name"] = plot.config.title;
-    
+
     // 简化处理，实际应从 plot.data 提取 x/y
     trace["x"] = nlohmann::json::array();
     trace["y"] = nlohmann::json::array();
-    
+
     if (plot.data.is_object()) {
         for (auto& [key, value] : plot.data.items()) {
             trace["x"].push_back(key);
@@ -301,69 +300,66 @@ nlohmann::json PlotlyGenerator::line_plot(const PlotData& plot) {
             }
         }
     }
-    
+
     data.push_back(trace);
-    
+
     nlohmann::json layout;
     layout["title"] = plot.config.title;
     layout["xaxis"]["title"] = plot.config.xlab;
     layout["yaxis"]["title"] = plot.config.ylab;
-    
+
     return {{"data", data}, {"layout", layout}};
 }
 
 nlohmann::json PlotlyGenerator::scatter_plot(const PlotData& plot) {
     nlohmann::json data = nlohmann::json::array();
-    
+
     nlohmann::json trace;
     trace["type"] = "scatter";
     trace["mode"] = "markers";
     trace["name"] = plot.config.title;
-    
+
     // 简化处理
     trace["x"] = nlohmann::json::array();
     trace["y"] = nlohmann::json::array();
-    
+
     data.push_back(trace);
-    
+
     nlohmann::json layout;
     layout["title"] = plot.config.title;
     layout["xaxis"]["title"] = plot.config.xlab;
     layout["yaxis"]["title"] = plot.config.ylab;
-    
+
     return {{"data", data}, {"layout", layout}};
 }
 
 nlohmann::json PlotlyGenerator::heatmap_plot(const PlotData& plot) {
     nlohmann::json data = nlohmann::json::array();
-    
+
     nlohmann::json trace;
     trace["type"] = "heatmap";
     trace["name"] = plot.config.title;
-    
+
     // 简化处理，实际应提取 z 矩阵
     trace["z"] = nlohmann::json::array();
-    
+
     data.push_back(trace);
-    
+
     nlohmann::json layout;
     layout["title"] = plot.config.title;
-    
+
     return {{"data", data}, {"layout", layout}};
 }
 
 nlohmann::json PlotlyGenerator::multiqc_template() {
     // MultiQC 风格的颜色和字体
     nlohmann::json template_config;
-    template_config["colorway"] = {"#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", 
+    template_config["colorway"] = {"#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
                                    "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"};
-    template_config["font"] = {
-        {"family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto"},
-        {"size", 12}
-    };
+    template_config["font"] = {{"family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto"}, {"size", 12}};
     template_config["paper_bgcolor"] = "rgba(0,0,0,0)";
     template_config["plot_bgcolor"] = "rgba(0,0,0,0)";
-    
+
     return template_config;
 }
 

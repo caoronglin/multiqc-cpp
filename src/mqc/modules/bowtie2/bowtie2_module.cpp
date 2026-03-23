@@ -2,13 +2,17 @@
 #include <spdlog/spdlog.h>
 #include <fstream>
 #include <regex>
-namespace mqc {
-Bowtie2Module::Bowtie2Module() : BaseModule("bowtie2", "Bowtie 2", "Bowtie 2 is an ultrafast and memory-efficient tool for aligning sequencing reads") {}
+namespace mqc
+{
+Bowtie2Module::Bowtie2Module()
+    : BaseModule("bowtie2", "Bowtie 2",
+                 "Bowtie 2 is an ultrafast and memory-efficient tool for aligning sequencing reads") {}
 void Bowtie2Module::parse(const std::vector<MatchedFile>& files) {
     spdlog::info("Parsing {} Bowtie2 files", files.size());
     for (const auto& file : files) {
         std::ifstream ifs(file.filepath);
-        if (!ifs.is_open()) continue;
+        if (!ifs.is_open())
+            continue;
         Bowtie2Data& data = samples_[file.sample_name];
         std::string line;
         std::regex total_re(R"((\d+) reads; of these:)");
@@ -28,13 +32,14 @@ void Bowtie2Module::parse(const std::vector<MatchedFile>& files) {
         std::map<std::string, GeneralStatsColumn> headers = {
             {"total_reads", {"Total Reads", "Total reads", "Blues", "{:,d}", "", "", false, 100000000, 0}},
             {"aligned", {"Aligned", "Aligned reads", "Greens", "{:,d}", "", "", false, 100000000, 0}},
-            {"percent_aligned", {"% Aligned", "Alignment rate", "Greens", "{:.1f}", "%", "", false, 100, 0}}
-        };
+            {"percent_aligned", {"% Aligned", "Alignment rate", "Greens", "{:.1f}", "%", "", false, 100, 0}}};
         for (const auto& [sample_id, sample] : samples_) {
-            data[sample_id] = {{"total_reads", sample.total_reads}, {"aligned", sample.aligned}, {"percent_aligned", sample.percent_aligned}};
+            data[sample_id] = {{"total_reads", sample.total_reads},
+                               {"aligned", sample.aligned},
+                               {"percent_aligned", sample.percent_aligned}};
         }
         general_stats_addcols(data, headers);
         add_section("Bowtie 2 Alignment", "bowtie2", "Alignment statistics from Bowtie 2");
     }
 }
-}
+} // namespace mqc

@@ -6,47 +6,41 @@
 
 namespace fs = std::filesystem;
 
-namespace mqc {
+namespace mqc
+{
 
 // ============ BaseModule 实现 ============
 
 BaseModule::BaseModule(std::string id, std::string name, std::string info)
-    : id_(std::move(id))
-    , name_(std::move(name))
-    , info_(std::move(info))
-    , anchor_(id_) {
+    : id_(std::move(id)),
+      name_(std::move(name)),
+      info_(std::move(info)),
+      anchor_(id_) {
     // 转换为小写作为 anchor
     std::transform(anchor_.begin(), anchor_.end(), anchor_.begin(), ::tolower);
-    
+
     init_sample_name_cleaning();
 }
 
 void BaseModule::init_sample_name_cleaning() {
     // 默认的样本名清理扩展名
-    sample_name_clean_extensions = {
-        ".gz", ".fastq", ".fq", ".bam", ".sam", ".vcf", ".bcf",
-        ".txt", ".log", ".out", ".stats", ".summary",
-        "_fastqc", "_trimmed", "_aligned", "_sorted"
-    };
-    
+    sample_name_clean_extensions = {".gz",     ".fastq",   ".fq",      ".bam",   ".sam",   ".vcf",
+                                    ".bcf",    ".txt",     ".log",     ".out",   ".stats", ".summary",
+                                    "_fastqc", "_trimmed", "_aligned", "_sorted"};
+
     // 常见的样本名替换规则
-    sample_name_replacements = {
-        {R"(_R[12])", ""},
-        {R"(_[12])", ""},
-        {R"(\.cleaned)", ""},
-        {R"(\.filtered)", ""}
-    };
+    sample_name_replacements = {{R"(_R[12])", ""}, {R"(_[12])", ""}, {R"(\.cleaned)", ""}, {R"(\.filtered)", ""}};
 }
 
 std::string BaseModule::clean_sample_name(const std::string& filename) {
     std::string result = filename;
-    
+
     // 移除目录部分
     auto pos = result.find_last_of("/\\");
     if (pos != std::string::npos) {
         result = result.substr(pos + 1);
     }
-    
+
     // 移除已知扩展名
     for (const auto& ext : sample_name_clean_extensions) {
         if (result.size() >= ext.size()) {
@@ -58,19 +52,16 @@ std::string BaseModule::clean_sample_name(const std::string& filename) {
             }
         }
     }
-    
+
     // 应用替换规则
     // TODO: 使用 std::regex 实现
     // 暂时简单处理
     return result;
 }
 
-void BaseModule::add_section(const std::string& name,
-                            const std::string& anchor,
-                            const std::string& description,
-                            const std::optional<std::string>& content,
-                            const std::optional<std::string>& plot_id,
-                            const std::optional<std::string>& comment) {
+void BaseModule::add_section(const std::string& name, const std::string& anchor, const std::string& description,
+                             const std::optional<std::string>& content, const std::optional<std::string>& plot_id,
+                             const std::optional<std::string>& comment) {
     Section section;
     section.name = name;
     section.anchor = anchor;
@@ -78,19 +69,15 @@ void BaseModule::add_section(const std::string& name,
     section.content = content;
     section.plot_id = plot_id;
     section.comment = comment;
-    
+
     sections_.push_back(std::move(section));
-    
+
     spdlog::debug("Module {} added section: {}", id_, name);
 }
 
-void BaseModule::add_data(const std::string& key, const nlohmann::json& value) {
-    data_[key] = value;
-}
+void BaseModule::add_data(const std::string& key, const nlohmann::json& value) { data_[key] = value; }
 
-void BaseModule::add_plot(const PlotData& plot) {
-    plots_.push_back(plot);
-}
+void BaseModule::add_plot(const PlotData& plot) { plots_.push_back(plot); }
 
 void BaseModule::general_stats_addcols(const nlohmann::json& data,
                                        const std::map<std::string, GeneralStatsColumn>& headers) {
@@ -98,7 +85,7 @@ void BaseModule::general_stats_addcols(const nlohmann::json& data,
     for (auto& [sample_id, metrics] : data.items()) {
         general_stats_data_[sample_id] = metrics;
     }
-    
+
     // 合并表头
     for (const auto& [metric, column] : headers) {
         general_stats_headers_[metric] = column;
@@ -108,16 +95,16 @@ void BaseModule::general_stats_addcols(const nlohmann::json& data,
 void BaseModule::write_data_file(const std::string& dirname, const std::string& filename) {
     // 创建输出目录
     fs::create_directories(dirname);
-    
+
     // 写入 TSV 格式
     auto filepath = dirname / (filename + ".tsv");
     std::ofstream ofs(filepath);
-    
+
     if (!ofs.is_open()) {
         spdlog::error("Failed to open data file: {}", filepath.string());
         return;
     }
-    
+
     // 写入数据
     if (general_stats_data_.is_object()) {
         // 收集所有列
@@ -129,14 +116,14 @@ void BaseModule::write_data_file(const std::string& dirname, const std::string& 
                 }
             }
         }
-        
+
         // 写入表头
         ofs << "Sample\t";
         for (const auto& key : all_keys) {
             ofs << key << "\t";
         }
         ofs << "\n";
-        
+
         // 写入数据行
         for (const auto& [sample, metrics] : general_stats_data_.items()) {
             ofs << sample << "\t";
@@ -157,7 +144,7 @@ void BaseModule::write_data_file(const std::string& dirname, const std::string& 
             ofs << "\n";
         }
     }
-    
+
     spdlog::info("Data written to: {}", filepath.string());
 }
 
